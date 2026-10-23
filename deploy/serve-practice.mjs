@@ -35,6 +35,8 @@ const TYPES = {
 const ISOLATION = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
+  // applied to every response incl. the robot workers, so a robot program cannot reach the network
+  "Content-Security-Policy": "connect-src 'self'; object-src 'none'; base-uri 'self'",
   "X-Robots-Tag": "noindex, nofollow",
 };
 

@@ -1489,8 +1489,8 @@ const bootSteps: [string, Promise<unknown>][] = [
   [`SPARK SIM v${VERSION}`, Promise.resolve()],
   ["MuJoCo physics (WebAssembly)", host.whenReady()],
   ["MicroPython 1.29 · SPARK build", fetch(mpWasm).then((r) => r.arrayBuffer())],
-  ["Zumo 2040 model · 6 arenas", Promise.resolve()],
-  [`House bots · ${BOTS.length} programs`, Promise.resolve()],
+  [`Zumo 2040 model · ${Object.keys(ARENAS).length} arenas`, Promise.resolve()],
+  [`Robot programs · ${BOTS.length}`, Promise.resolve()],
 ];
 const logLines: string[] = bootSteps.map(([name]) => `› ${name.toUpperCase().padEnd(38, ".")} …`);
 const renderBoot = (done: boolean[]) => {

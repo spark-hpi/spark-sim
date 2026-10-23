@@ -1,9 +1,19 @@
 // Headless checks of the world (physics, sensors, rules) without robot programs: npm test
 // Reference values come from the old 2D sim (02_triathlon/tracking/sim) and Pololu datasheets.
-import "../overlay/register-world.ts"; // tests run against the full build (competition arenas + scoring)
 import loadMujoco from "mujoco";
 import { arenaById } from "../src/shared/arenas.ts";
 import { World } from "../src/world/world.ts";
+
+// Load the private competition overlay if it is checked out (admin), so its arenas/scoring are registered.
+// The public build has no overlay/, so the few tests that need its arenas are skipped (see `hasOverlay`).
+let hasOverlay = false;
+try {
+  const overlayEntry = "../overlay/register-world.ts"; // a variable so tsc doesn't try to resolve it in the public repo
+  await import(overlayEntry);
+  hasOverlay = true;
+} catch {
+  // no overlay in this checkout — fair build
+}
 
 const mj = await loadMujoco();
 let failures = 0;
@@ -50,8 +60,8 @@ console.log(`prox threshold calibrated in ${(performance.now() - t0).toFixed(0)}
   w.dispose();
 }
 
-// 3. Grey zones (KotH hill, shuttle bases) are distinguishable from white and black
-{
+// 3. Grey zones (KotH hill, shuttle bases) are distinguishable from white and black (competition arenas)
+if (hasOverlay) {
   const w = new World(mj, arenaById("koth"), [{ x: -0.047, y: 0, yaw: 0 }, { x: -0.3, y: 0, yaw: 0 }], { proxThreshold: threshold });
   w.advanceTo(100_000);
   const grey = w.readLine(w.robots[0], true);
@@ -133,7 +143,7 @@ console.log(`prox threshold calibrated in ${(performance.now() - t0).toFixed(0)}
 }
 
 // 9. King of the hill: standing in the zone scores time — from go (start signal + 5 s) on, and not after Stop
-{
+if (hasOverlay) {
   const w = new World(mj, arenaById("koth"), [{ x: 0, y: 0, yaw: 0 }, { x: 0.4, y: 0.4, yaw: 0 }], { proxThreshold: threshold, autoPressA: 0 });
   w.advanceTo(4_000_000);
   const early = w.rules.state.scores[0];

@@ -221,6 +221,10 @@ export const DOC_PAGES: DocPage[] = [
         p: "SPARK Sim is a training ground for the Pololu **Zumo 2040**. You write the same `main.py` that you will later copy onto the real robot, and the simulator runs it in real MicroPython against a 3D physics model of the Zumo: tracks, blade, battery, sensors and their timing. Your team gets its real robot only a few hours before the event, so this is where you learn, test and tune.",
       },
       { p: "Everything runs in your browser. Your code is saved in this browser automatically; nothing is uploaded." },
+      {
+        note: "This is a simulation, not the real robot. The physics and sensors are tuned to approximate a Zumo 2040 but will differ from real hardware — surface, wear, battery and tolerances all vary. Use it to develop and sanity-check your code, then always test on the real robot before you rely on it.",
+        kind: "warn",
+      },
       { h: "The screen in five minutes", id: "screen" },
       {
         ordered: true,
@@ -251,7 +255,7 @@ export const DOC_PAGES: DocPage[] = [
       {
         list: [
           "Write and debug your program with autocompletion, hover help, error markers and a plotter for printed values.",
-          "Train against [house bots](doc:house-bots) of different strategies and difficulty.",
+          "Train against house bots of different strategies and difficulty, when your deployment provides them.",
           "Measure your progress with the [test bench](doc:test-bench): dozens of matches in parallel, a win rate with a 95 % interval, and every match can be watched again.",
           "Test robustness with weak batteries, a dusty floor and noisy sensors ([robustness checklist](doc:robustness)).",
           "Learn the rules of every arena, starting with the [dohyo](doc:arena-dohyo).",

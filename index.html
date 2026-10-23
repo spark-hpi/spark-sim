@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SPARK Sim</title>
     <meta name="description" content="Zumo 2040 simulator of the SPARK robotics community: real MicroPython, MuJoCo physics, in the browser." />
+    <!-- Keep the robot programs from reaching the network: the app only talks to its own origin. -->
+    <meta http-equiv="Content-Security-Policy" content="connect-src 'self'; object-src 'none'; base-uri 'self'" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       // apply the stored theme before the first paint (like spark-hpi.de)
