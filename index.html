@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SPARK Sim</title>
+    <meta name="description" content="Zumo 2040 simulator of the SPARK robotics community: real MicroPython, MuJoCo physics, in the browser." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // apply the stored theme before the first paint (like spark-hpi.de)
+      try {
+        const t = localStorage.getItem("spark-sim:theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+        const st = JSON.parse(localStorage.getItem("spark-sim:settings") || "{}");
+        const px = { s: 11, m: 12, l: 14 }[st.uiSize] || 12;
+        document.documentElement.style.setProperty("--ui", px + "px");
+      } catch (_) {}
+    </script>
+  </head>
+  <body>
+    <div id="splash" class="splash">
+      <canvas id="splash-star" class="splash-star"></canvas>
+      <div class="splash-lockup">
+        <div class="splash-word">SPARK</div>
+        <div class="splash-sub">SIM <span>Zumo 2040 training ground</span></div>
+      </div>
+      <div class="splash-log" id="splash-log"></div>
+      <div class="splash-bar"><i id="splash-progress"></i></div>
+    </div>
+
+    <header class="topbar">
+      <button class="brand" id="brand" title="About SPARK Sim">
+        <span id="brand-star" class="brand-star"></span>
+        <span class="wordmark">SPARK</span>
+        <span class="brand-rule"></span>
+        <span class="brand-sub"><b>SIM</b><small>Zumo 2040</small></span>
+      </button>
+      <label class="field">
+        <span class="label">Arena</span>
+        <select id="arena"></select>
+      </label>
+      <div class="group">
+        <button id="run" class="btn primary" title="Run all programs (Space · Ctrl+Enter). Robots that wait for button A wait for the start signal.">▶ Run</button>
+        <button id="start" class="btn" title="Start signal (S): button A on every robot like the referee's start; they may move 5 s later. Without a running match it starts one.">⚑ Start</button>
+        <button id="stop" class="btn" title="Stop the programs (Space · Ctrl+.)" aria-label="Stop">■<span class="bl"> Stop</span></button>
+        <button id="reset" class="btn" title="Robots back to their start positions (R)" aria-label="Reset">↺<span class="bl"> Reset</span></button>
+      </div>
+      <div class="seg" id="speed" role="group" aria-label="Speed">
+        <button data-speed="0" title="Pause">❚❚</button>
+        <button data-speed="0.25">¼×</button>
+        <button data-speed="0.5">½×</button>
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="4">4×</button>
+        <button data-speed="Infinity" title="As fast as possible">Max</button>
+      </div>
+      <div class="clock"><span id="simtime">0.00 s</span><span id="rtf" class="muted"></span></div>
+      <div class="texture-fill"></div>
+      <button id="docs-btn" class="btn" title="Documentation: tutorials, API reference, rules (F1)">Docs</button>
+      <div class="pop-anchor">
+        <button id="layout-btn" class="btn" title="Arrange the workspace: presets, where the console sits, show and hide panels" aria-haspopup="true" aria-label="Layout">▦<span class="bl"> Layout</span></button>
+        <div id="layout-pop" class="popover wide hidden" role="dialog" aria-label="Layout"></div>
+      </div>
+      <div class="pop-anchor">
+        <button id="settings-btn" class="btn icon" title="Settings: theme, text size, editor font, sound" aria-haspopup="true" aria-label="Settings">⚙</button>
+        <div id="settings-pop" class="popover hidden" role="dialog" aria-label="Settings"></div>
+      </div>
+      <button id="help" class="btn icon" title="Help, shortcuts and the guided tour (?)" aria-label="Help">?</button>
+    </header>
+
+    <main class="layout" id="layout">
+      <section class="panel code-panel" id="panel-code" aria-label="Code">
+        <div class="panel-head">
+          <div class="tabs" id="tabs" role="tablist" aria-label="Robots"></div>
+          <div class="panel-tools" data-tools></div>
+        </div>
+        <div class="robot-head">
+          <input id="robot-name" class="name" maxlength="24" spellcheck="false" aria-label="Robot name" title="Name of this robot (shown in the 3D view and the console)" />
+          <button id="remove-robot" class="btn icon" title="Remove this robot from the field" aria-label="Remove this robot">✕</button>
+        </div>
+        <label class="source-row">
+          <span class="label">Program</span>
+          <select id="source" aria-label="Program of this robot" title="Your own code, an example or a house bot as opponent"></select>
+        </label>
+        <div id="source-info" class="source-info"></div>
+        <div id="editor" class="editor"></div>
+        <div class="code-foot">
+          <button id="download" class="btn" title="Save as main.py to copy onto the real robot">⇩ main.py</button>
+          <button id="upload" class="btn" title="Open a .py file into this robot">⇧ Open</button>
+          <button id="share" class="btn" title="Copy a link that opens this program — no server needed">⇪ Link</button>
+          <input id="upload-file" type="file" accept=".py,text/x-python,text/plain" hidden />
+          <span id="save-state" class="hint" title="Your code is saved in this browser automatically"></span>
+          <span class="font-step">
+            <button id="ed-smaller" class="btn icon" title="Smaller editor font (Ctrl/⌘ + −)" aria-label="Smaller editor font">A−</button>
+            <button id="ed-larger" class="btn icon" title="Larger editor font (Ctrl/⌘ + =)" aria-label="Larger editor font">A+</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="panel stage-panel" id="panel-stage" aria-label="3D view">
+        <div class="stage-frame">
+          <div class="stage-bar">
+            <div class="seg" id="pixel-mode" role="group" aria-label="Rendering">
+              <button data-mode="pixel" aria-pressed="true" title="Pixel look, colours kept">Pixel</button>
+              <button data-mode="spark" title="Blue like the SPARK star">Spark</button>
+              <button data-mode="klar" title="No filter">Clear</button>
+            </div>
+            <div class="spacer"></div>
+            <div class="pop-anchor">
+              <button id="world-btn" class="btn" title="Battery, grip and sensor noise — test how robust a program is">World</button>
+              <div id="world-pop" class="popover hidden"></div>
+            </div>
+            <button id="autopress" class="btn toggle" aria-pressed="false" title="Give the start signal automatically 0.2 s after Run (otherwise: ⚑ Start or key S)">Auto start</button>
+            <button id="overlay" class="btn toggle" aria-pressed="true" title="Show what the sensors see: proximity fans and line sensor dots (V)">Sensors</button>
+            <button id="sound" class="btn toggle" aria-pressed="true" title="Sound: the robots' buzzers and referee cues (robot out, lap, point, match over)">Sound</button>
+            <div class="seg" role="group" aria-label="Camera">
+              <button id="view-side" title="Angled view" aria-label="Angled view">◩</button>
+              <button id="view-top" title="Top view" aria-label="Top view">◻</button>
+              <button id="view-follow" title="Follow the selected robot" aria-label="Follow the selected robot">◎</button>
+            </div>
+            <div class="panel-tools" data-tools></div>
+          </div>
+          <div id="viewer" class="viewer">
+            <div id="scoreboard" class="scoreboard"></div>
+            <div id="banner" class="banner hidden"></div>
+            <div class="viewer-help">Drag: orbit · Right-drag: pan · Wheel: zoom · Shift+drag: move robot (wheel turns it)</div>
+          </div>
+          <div class="timeline">
+            <button id="tl-play" class="btn icon" title="Play the recording from here" aria-label="Play the recording">▶</button>
+            <input id="tl-slider" type="range" min="0" max="0" step="0.001" value="0" aria-label="Timeline" title="Scrub through everything that happened (← → step, L live)" />
+            <span id="tl-label" class="tl-label">LIVE</span>
+            <button id="tl-live" class="btn toggle" aria-pressed="true" title="Follow the simulation (L)">Live</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel dock-panel" id="panel-dock" aria-label="Console, telemetry, test bench and docs">
+        <div class="dock-tabs panel-head" role="tablist">
+          <button data-tab="console" role="tab" aria-selected="true" title="print() output, errors and match events">Console</button>
+          <button data-tab="telemetry" role="tab" title="Charts of the selected robot and of the numbers you print">Telemetry</button>
+          <button data-tab="bench" role="tab" title="Many headless matches: win rates, round robin">Test bench</button>
+          <button data-tab="docs" role="tab" title="Tutorials, API reference, arenas and rules (F1)">Docs</button>
+          <div id="console-tools" class="console-tools">
+            <select id="con-filter" aria-label="Show lines of" title="Show all lines, one robot or only errors">
+              <option value="all">All</option>
+              <option value="err">Errors</option>
+            </select>
+            <input id="con-search" type="search" placeholder="Search" aria-label="Search the console" spellcheck="false" />
+            <button id="con-copy" class="link-btn" title="Copy the visible lines">copy</button>
+            <button id="clear-console" class="link-btn" title="Clear the console">clear</button>
+          </div>
+          <i class="dock-fill"></i>
+          <div class="panel-tools" data-tools></div>
+        </div>
+        <div class="dock-body">
+          <div id="console" class="console pane" data-pane="console" role="log" aria-live="polite"></div>
+          <button id="con-new" class="con-new hidden" title="Scroll to the newest lines">↓ new lines</button>
+          <div id="telemetry" class="telemetry pane hidden" data-pane="telemetry"></div>
+          <div id="bench" class="bench pane hidden" data-pane="bench"></div>
+          <div id="docs" class="docs pane hidden" data-pane="docs"></div>
+        </div>
+      </section>
+
+      <aside class="panel inspector" id="panel-inspector" aria-label="Inspector">
+        <div class="insp-title panel-head">
+          <span id="insp-dot" class="chip"></span><span id="insp-name">Robot</span>
+          <div class="panel-tools" data-tools></div>
+        </div>
+        <div class="insp-body">
+          <div class="oled-frame" title="The robot's 128×64 OLED display (Display.show())"><canvas id="oled" class="oled" width="128" height="64"></canvas></div>
+          <div class="buttons">
+            <button class="hw" data-btn="A" title="Button A — hold with the mouse or key A">A</button>
+            <button class="hw" data-btn="B" title="Button B — hold with the mouse or key B">B</button>
+            <button class="hw" data-btn="C" title="Button C — hold with the mouse or key C">C</button>
+          </div>
+          <div class="leds" id="leds" title="The six RGB LEDs (RGBLEDs)"></div>
+
+          <div class="sec" title="Raw reading of the 5 line sensors, left to right: small = bright (white ≈ 110), 1024 = black or nothing below"><span>Line sensors</span><i></i><em>raw 0–1024</em></div>
+          <div class="bars" id="line"></div>
+
+          <div class="sec" title="Proximity counts 0–6 per sensor (left, front, right), measured with the left and the right IR LEDs. Higher = closer"><span>Proximity</span><i></i><em>L · R LEDs</em></div>
+          <div class="prox" id="prox"></div>
+
+          <div class="sec" title="Motor commands −6000…6000"><span>Motors</span><i></i></div>
+          <div class="motors" id="motors"></div>
+
+          <div class="sec" title="Measured in the simulation (not by the robot): speed, heading, tilt, encoder counts, battery"><span>Motion</span><i></i></div>
+          <div class="kv" id="motion"></div>
+
+          <div class="sec" title="What the program last read from the IMU (zeros until IMU.enable_default())"><span>IMU</span><i></i><em>last read</em></div>
+          <div class="kv" id="imu"></div>
+        </div>
+      </aside>
+    </main>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-card">
+        <button id="modal-close" class="btn icon modal-x" title="Close">✕</button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

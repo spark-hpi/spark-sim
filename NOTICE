@@ -1,0 +1,22 @@
+SPARK Sim
+Copyright (c) 2026 SPARK community (spark-hpi.de)
+
+This product bundles or builds on the following third-party components, each
+under its own license:
+
+- MuJoCo — Apache License 2.0, © Google DeepMind.
+- MicroPython — MIT License, © 2013-2024 Damien P. George and contributors.
+  (vendor/micropython is built from MicroPython with a small patch; see
+  vendor/micropython/ for build notes and the upstream license.)
+- Pololu zumo-2040-robot library — MIT License, © 2023 Pololu Corporation.
+  (hardware-independent logic in src/robot/python/zumo_2040_robot/robot.py)
+- three.js — MIT License, © three.js authors.
+- CodeMirror — MIT License, © by Marijn Haverbeke and others.
+- Departure Mono — SIL Open Font License 1.1, © Helena Zhang.
+  (public/fonts/DepartureMono-Regular.woff2; license in
+  public/fonts/DepartureMono-LICENSE.txt)
+- EB Garamond — SIL Open Font License 1.1 (via @fontsource/eb-garamond).
+- JetBrains Mono — SIL Open Font License 1.1 (via @fontsource/jetbrains-mono).
+
+The names "SPARK" and the SPARK community are used with permission. The SPARK
+logo star and the Epoch wordmark font are not part of this repository.

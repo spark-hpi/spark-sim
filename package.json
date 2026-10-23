@@ -1,0 +1,40 @@
+{
+  "name": "spark-sim",
+  "private": true,
+  "version": "0.2.0",
+  "description": "SPARK Zumo 2040 simulator: real MicroPython programs in 3D physics, in the browser",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:practice": "tsc --noEmit && SPARK_PRACTICE=1 vite build --outDir dist-practice",
+    "preview": "vite preview",
+    "preview:practice": "vite preview --outDir dist-practice",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/headless.ts",
+    "deploy": "npm run build && WRANGLER_SEND_METRICS=false npx --yes wrangler@4.86.0 deploy -c overlay/deploy/wrangler.jsonc",
+    "deploy:practice": "npm run build:practice && WRANGLER_SEND_METRICS=false npx --yes wrangler@4.86.0 deploy -c overlay/deploy/wrangler.practice.jsonc",
+    "pack:practice": "bash scripts/pack-practice.sh"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/lang-python": "6.2.1",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.14",
+    "@fontsource/eb-garamond": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@lezer/highlight": "1.2.5",
+    "codemirror": "6.0.2",
+    "mujoco": "3.1.16",
+    "three": "0.186.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.9",
+    "@types/three": "0.186.0",
+    "tsx": "4.20.6",
+    "typescript": "6.0.3",
+    "vite": "8.3.1"
+  }
+}

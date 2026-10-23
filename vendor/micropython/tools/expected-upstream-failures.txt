@@ -1,0 +1,39 @@
+# Tests of MicroPython's own suite (micropython/tests) that are expected to fail
+# with the spark variant, used by scripts/build-micropython.sh --upstream-tests.
+# Format: <suite> <test>   # reason
+# suite "normal": run-tests.py -t webassembly (CLI, 128 KiB fixed heap)
+# suite "torture": the same .py tests via tools/gc-torture-cli.mjs (gc.threshold(0))
+
+# The CLI runs every script through runPython() as "<stdin>" without access to
+# the tests directory, so traces show "<stdin>" instead of the file name and
+# sys_settrace_features cannot import its helper package sys_settrace_subdir.
+normal  misc/sys_settrace_cov.py
+normal  misc/sys_settrace_features.py
+normal  misc/sys_settrace_generator.py
+normal  misc/sys_settrace_loop.py
+torture misc/sys_settrace_cov.py
+torture misc/sys_settrace_features.py
+torture misc/sys_settrace_generator.py
+torture misc/sys_settrace_loop.py
+
+# Interns thousands of random attribute names as qstrs, which are never freed:
+# can need more than the CLI's fixed 128 KiB heap (random, so it sometimes
+# passes; always passes with -X heapsize=1M).
+normal  basics/class_setname_hazard_rand.py
+torture basics/class_setname_hazard_rand.py
+
+# pyscript-variant tests: weakref is not enabled (EXTRA_FEATURES level, like the
+# rp2 port), the heap cannot grow (by design), and proxy reference numbering
+# differs because a collection inside the call keeps the first JsProxy alive a
+# little longer than the pyscript variant's deferred top-level collection.
+normal  ports/webassembly/gc_behaviour.mjs
+normal  ports/webassembly/heap_expand.mjs
+normal  ports/webassembly/weakref_finalize_collect.mjs
+normal  ports/webassembly/weakref_ref_collect.mjs
+
+# Deep recursion with a full collection on every allocation exceeds the test
+# timeout (each collection scans the deep stack); they pass in the normal suite.
+torture stress/recursion.py
+torture stress/recursive_data.py
+torture stress/recursive_gen.py
+torture stress/recursive_iternext.py

@@ -1,0 +1,19 @@
+node_modules
+dist
+dist-practice
+spark-sim-practice.zip
+*.log
+.DS_Store
+
+# Cloudflare / wrangler local state and local secrets (the access key is a Worker secret, never a file)
+.wrangler
+.dev.vars*
+.env
+.env.*
+
+# editor settings
+.vscode
+.idea
+
+# private competition overlay (cloned here locally by admins, never public)
+/overlay/

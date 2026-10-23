@@ -1,0 +1,500 @@
+diff --git a/ports/webassembly/api.js b/ports/webassembly/api.js
+index 0718d13..dcc63f9 100644
+--- a/ports/webassembly/api.js
++++ b/ports/webassembly/api.js
+@@ -34,12 +34,35 @@
+ //   and in a browser goes to console, in node goes to process.stdout.write.
+ // - stderr: same behaviour as stdout but for error output.
+ // - linebuffer: whether to buffer line-by-line to stdout/stderr.
++// SPARK simulator patch, additional options:
++// - bytecodeHook: { interval, callback } calls callback(n) synchronously from
++//   the VM every `interval` executed bytecodes (n = bytecodes in that period).
++//   The callback must not throw and must not call back into Python; to stop
++//   the program, call interrupt() (raises KeyboardInterrupt in Python).
++//   A truthy return value schedules the handler registered with the Python
++//   module `_spark_irq.set(handler)` (mp_sched_schedule, like an interrupt).
++// - gcspillsize: size in bytes of the buffer that receives the spilled wasm
++//   locals during a garbage collection (default 1 MiB).
+ export async function loadMicroPython(options) {
+-    const { pystack, heapsize, url, stdin, stdout, stderr, linebuffer } =
+-        Object.assign(
+-            { pystack: 2 * 1024, heapsize: 1024 * 1024, linebuffer: true },
+-            options,
+-        );
++    const {
++        pystack,
++        heapsize,
++        url,
++        stdin,
++        stdout,
++        stderr,
++        linebuffer,
++        bytecodeHook,
++        gcspillsize,
++    } = Object.assign(
++        {
++            pystack: 2 * 1024,
++            heapsize: 1024 * 1024,
++            linebuffer: true,
++            gcspillsize: 1024 * 1024,
++        },
++        options,
++    );
+     let Module = {};
+     Module.locateFile = (path, scriptDirectory) =>
+         url || scriptDirectory + path;
+@@ -87,6 +110,29 @@ export async function loadMicroPython(options) {
+     }
+     Module = await _createMicroPythonModule(Module);
+     globalThis.Module = Module;
++
++    // SPARK simulator patch: route every JS->C entry point through the
++    // synchronous GC driver (see $MPGC in library.js).  ccall() looks the
++    // functions up as Module["_" + name], so replacing them here is enough.
++    const mpGc = Module.mpGc;
++    mpGc.allocate(gcspillsize);
++    for (const key of Object.keys(Module)) {
++        if (
++            /^_(mp|proxy)_/.test(key) &&
++            typeof Module[key] === "function" &&
++            !Module[key].mpGcWrapped &&
++            !key.startsWith("_mp_js_gc_") &&
++            !key.startsWith("_mp_js_vm_hook_")
++        ) {
++            Module[key] = mpGc.wrap(Module[key]);
++        }
++    }
++    const setBytecodeHook = (interval, callback) => {
++        Module.mpBytecodeHook = callback || null;
++        interval = callback ? Math.max(0, Math.min(interval | 0, 0x3fffffff)) : 0;
++        Module._mp_js_vm_hook_set_interval(interval);
++    };
++
+     proxy_js_init();
+     const pyimport = (name) => {
+         const value = Module._malloc(3 * 4);
+@@ -105,8 +151,35 @@ export async function loadMicroPython(options) {
+         [pystack, heapsize],
+     );
+     Module.ccall("proxy_c_init", "null", [], []);
++    if (bytecodeHook) {
++        setBytecodeHook(bytecodeHook.interval, bytecodeHook.callback);
++    }
+     return {
+         _module: Module,
++        // SPARK simulator patch: bytecode counter and GC statistics.
++        // Set (or clear, with callback = null) the bytecode hook.
++        setBytecodeHook: setBytecodeHook,
++        // Bytecodes executed since the last hook callback or the last call of
++        // this function; starts a new hook period.  Cheap, may be called from
++        // JS functions that Python calls.
++        takeBytecodeCount() {
++            return Module._mp_js_vm_hook_take() >>> 0;
++        },
++        // Raise KeyboardInterrupt in the running Python code at the next
++        // backwards branch / loop iteration.
++        interrupt() {
++            Module._mp_sched_keyboard_interrupt();
++        },
++        // Collections done, collections skipped (nested JS->Python calls) and
++        // the largest number of bytes of spilled wasm locals seen so far.
++        gcStats() {
++            return {
++                collections: mpGc.collections,
++                skipped: mpGc.skipped,
++                maxSpillBytes: mpGc.maxSpill,
++                spillBufferBytes: mpGc.size,
++            };
++        },
+         PyProxy: PyProxy,
+         FS: Module.FS,
+         globals: {
+diff --git a/ports/webassembly/library.h b/ports/webassembly/library.h
+index 04b408d..6933851 100644
+--- a/ports/webassembly/library.h
++++ b/ports/webassembly/library.h
+@@ -31,3 +31,9 @@ extern int mp_js_ticks_ms(void);
+ extern void mp_js_hook(void);
+ extern double mp_js_time_ms(void);
+ extern uint32_t mp_js_random_u32(void);
++
++// SPARK simulator patch: synchronous GC (see gc_collect in main.c) and the
++// bytecode counter hook.
++extern int mp_js_gc_can_spill(void);
++extern void mp_js_gc_spill_and_scan(void);
++extern int mp_js_vm_hook(uint32_t n_bytecodes); // nonzero: schedule the timer interrupt handler
+diff --git a/ports/webassembly/library.js b/ports/webassembly/library.js
+index 6fcd9f2..d097860 100644
+--- a/ports/webassembly/library.js
++++ b/ports/webassembly/library.js
+@@ -72,4 +72,130 @@ mergeInto(LibraryManager.library, {
+ 
+     mp_js_random_u32: () =>
+         globalThis.crypto.getRandomValues(new Uint32Array(1))[0],
++
++    // ------------------------------------------------------------------
++    // SPARK simulator patch: synchronous GC via a manual Asyncify unwind/rewind.
++    //
++    // gc_collect() (main.c) calls mp_js_gc_spill_and_scan().  That starts an
++    // Asyncify unwind, which spills the locals of every active wasm frame into
++    // the buffer at $MPGC.data and returns all the way to the JS->C entry point.
++    // The entry point is wrapped by $MPGC.wrap (installed by api.js); the wrapper
++    // stops the unwind, lets C scan the spilled locals (mp_js_gc_scan_region)
++    // and rewinds the stack by calling the entry point again.  The rewind ends
++    // in mp_js_gc_spill_and_scan(), which stops it, and gc_collect() continues.
++    // Everything happens synchronously inside the original call, so long-running
++    // code (a robot program in a `while True:` loop) gets real collections and a
++    // hard heap limit.
++    //
++    // Unwinding through a JS frame is only safe for stateless trampolines
++    // (emscripten's invoke_* functions for setjmp/longjmp).  If Python is entered
++    // again from JS that was called from Python (depth > 1), the outer frames
++    // cannot be spilled and gc_collect() skips the collection.
++    $MPGC__deps: ["malloc", "free"],
++    $MPGC: {
++        STATE_NORMAL: 0,
++        STATE_UNWINDING: 1,
++        STATE_REWINDING: 2,
++        state: 0,
++        // Number of active calls through wrapped entry points.
++        depth: 0,
++        // Asyncify data: [current ptr, end ptr] header followed by the buffer.
++        data: 0,
++        size: 0,
++        // Statistics (exposed through api.js as gcStats()).
++        collections: 0,
++        skipped: 0,
++        maxSpill: 0,
++
++        allocate(size) {
++            if (MPGC.data) {
++                _free(MPGC.data);
++            }
++            MPGC.size = size;
++            MPGC.data = _malloc(8 + size);
++            if (!MPGC.data) {
++                throw new Error("MicroPython: cannot allocate GC spill buffer");
++            }
++        },
++
++        // Wrap a wasm export so that GC unwinds triggered inside it are handled.
++        wrap(func) {
++            const wrapped = function (...args) {
++                ++MPGC.depth;
++                try {
++                    let ret = func(...args);
++                    while (MPGC.state === MPGC.STATE_UNWINDING) {
++                        // The stack is fully unwound; scan the spilled locals.
++                        _asyncify_stop_unwind();
++                        MPGC.state = MPGC.STATE_NORMAL;
++                        const begin = MPGC.data + 8;
++                        const end = HEAPU32[MPGC.data >> 2];
++                        MPGC.maxSpill = Math.max(MPGC.maxSpill, end - begin);
++                        _mp_js_gc_scan_region(begin, end);
++                        // Rewind: calling the same export again restores all frames
++                        // and resumes in mp_js_gc_spill_and_scan().
++                        MPGC.state = MPGC.STATE_REWINDING;
++                        _asyncify_start_rewind(MPGC.data);
++                        ret = func(...args);
++                    }
++                    return ret;
++                } catch (e) {
++                    // Leave Asyncify in a sane state if the call aborted mid-way.
++                    if (MPGC.state === MPGC.STATE_UNWINDING) {
++                        _asyncify_stop_unwind();
++                    } else if (MPGC.state === MPGC.STATE_REWINDING) {
++                        _asyncify_stop_rewind();
++                    }
++                    MPGC.state = MPGC.STATE_NORMAL;
++                    throw e;
++                } finally {
++                    --MPGC.depth;
++                }
++            };
++            wrapped.mpGcWrapped = true;
++            return wrapped;
++        },
++    },
++
++    mp_js_gc_can_spill__deps: ["$MPGC"],
++    mp_js_gc_can_spill: () => {
++        if (MPGC.depth === 1 && MPGC.state === MPGC.STATE_NORMAL) {
++            return 1;
++        }
++        ++MPGC.skipped;
++        return 0;
++    },
++
++    mp_js_gc_spill_and_scan__deps: ["$MPGC"],
++    // Marks this import as one that unwinds, so Asyncify instruments its callers.
++    mp_js_gc_spill_and_scan__async: true,
++    mp_js_gc_spill_and_scan__postset: "Module.mpGc = MPGC;",
++    mp_js_gc_spill_and_scan: () => {
++        if (MPGC.state === MPGC.STATE_REWINDING) {
++            // Back at the point where the unwind started: the collection continues.
++            _asyncify_stop_rewind();
++            MPGC.state = MPGC.STATE_NORMAL;
++            return;
++        }
++        ++MPGC.collections;
++        HEAPU32[MPGC.data >> 2] = MPGC.data + 8;
++        HEAPU32[(MPGC.data + 4) >> 2] = MPGC.data + 8 + MPGC.size;
++        MPGC.state = MPGC.STATE_UNWINDING;
++        _asyncify_start_unwind(MPGC.data);
++    },
++
++    // SPARK simulator patch: called every N executed bytecodes (see main.c).
++    mp_js_vm_hook: (n) => {
++        const callback = Module.mpBytecodeHook;
++        if (callback) {
++            try {
++                // a truthy result asks the VM to schedule the timer interrupt handler (see main.c)
++                return callback(n >>> 0) ? 1 : 0;
++            } catch (e) {
++                // An exception must not unwind through the VM.
++                console.error("MicroPython bytecode hook threw:", e);
++            }
++        }
++        return 0;
++    },
+ });
+diff --git a/ports/webassembly/main.c b/ports/webassembly/main.c
+index 670d404..72ef3db 100644
+--- a/ports/webassembly/main.c
++++ b/ports/webassembly/main.c
+@@ -54,6 +54,12 @@ static size_t external_call_depth = 0;
+ // Emscripten defaults to a 64k C-stack, so our limit should be less than that.
+ #define CSTACK_SIZE (32 * 1024)
+ 
++#if MICROPY_GC_SYNC_ASYNCIFY
++// Blocks allocated since the last collection after which a Python -> JS call
++// collects first (see mp_js_gc_collect_before_js_call); set in mp_js_init.
++static size_t gc_pre_js_call_blocks = (size_t)-1;
++#endif
++
+ #if MICROPY_GC_SPLIT_HEAP_AUTO
+ static void gc_collect_top_level(mp_obj_t root_obj);
+ #endif
+@@ -86,6 +92,10 @@ void mp_js_init(int pystack_size, int heap_size) {
+     gc_init(heap, heap + heap_size);
+     #endif
+ 
++    #if MICROPY_GC_SYNC_ASYNCIFY
++    gc_pre_js_call_blocks = heap_size / MICROPY_BYTES_PER_GC_BLOCK / 4;
++    #endif
++
+     #if MICROPY_GC_SPLIT_HEAP_AUTO
+     // When MICROPY_GC_SPLIT_HEAP_AUTO is enabled, set the GC threshold to a low
+     // value so that a collection is triggered before the heap fills up.  The actual
+@@ -207,6 +217,87 @@ static void gc_collect_top_level(mp_obj_t root_obj) {
+     }
+ }
+ 
++#elif MICROPY_GC_SYNC_ASYNCIFY
++
++// Synchronous conservative GC for long-running code (SPARK simulator patch).
++//
++// Pointers can live in three places: the GC heap/root pointers (handled by
++// gc_collect_start, which also scans the pystack), the C shadow stack in linear
++// memory, and WebAssembly locals, which are invisible to a memory scan.  To make
++// the locals visible, mp_js_gc_spill_and_scan() (library.js) starts an Asyncify
++// unwind: every active wasm frame saves its locals into a buffer in linear memory
++// and returns, up to the JS->C entry point.  The entry-point wrapper installed by
++// api.js then calls mp_js_gc_scan_region() on that buffer and immediately rewinds
++// the stack, so execution continues right here, synchronously, without returning
++// to the JS event loop (upstream's emscripten_scan_registers() uses setTimeout and
++// therefore turns every collection into an asynchronous call).
++
++// Conservative scan of stack-like memory that also accepts interior pointers.
++// gc_collect_root() only keeps an object alive if a word points exactly at its
++// first block.  Optimised wasm code may keep only a derived pointer (for example
++// &self->re in re.sub() with a string pattern) in a local, which upstream's
++// scan ignores, so the object can be freed while still in use (found by running
++// the test suite with gc.threshold(0)).  Here a word pointing anywhere into an
++// allocated chain of blocks marks the head of that chain.  This mirrors the
++// alloc-table encoding in py/gc.c (2 bits per block: free/head/tail/mark).
++static void gc_scan_interior(void **ptrs, size_t len) {
++    mp_state_mem_area_t *area = &MP_STATE_MEM(area);
++    uintptr_t pool_start = (uintptr_t)area->gc_pool_start;
++    uintptr_t pool_end = (uintptr_t)area->gc_pool_end;
++    for (size_t i = 0; i < len; ++i) {
++        uintptr_t p = (uintptr_t)ptrs[i];
++        if (p < pool_start || p >= pool_end) {
++            continue;
++        }
++        size_t block = (p - pool_start) / MICROPY_BYTES_PER_GC_BLOCK;
++        #define SPARK_ATB_KIND(b) ((area->gc_alloc_table_start[(b) / 4] >> (2 * ((b) & 3))) & 3)
++        while (block > 0 && SPARK_ATB_KIND(block) == 2 /* AT_TAIL */) {
++            --block;
++        }
++        if (SPARK_ATB_KIND(block) == 1 /* AT_HEAD, not yet marked */) {
++            void *head = (void *)(pool_start + block * MICROPY_BYTES_PER_GC_BLOCK);
++            gc_collect_root(&head, 1);
++        }
++        #undef SPARK_ATB_KIND
++    }
++}
++
++static void gc_scan_func(void *begin, void *end) {
++    gc_scan_interior((void **)begin, (void **)end - (void **)begin);
++}
++
++// Called from JS while the wasm stack is unwound, with the spilled locals.
++void mp_js_gc_scan_region(void *begin, void *end) {
++    gc_scan_interior((void **)begin, ((uintptr_t)end - (uintptr_t)begin) / sizeof(void *));
++}
++
++// Python -> JS calls (jsproxy_call) may re-enter Python, and no collection can
++// run while nested (see below).  So collect before calling out to JS once a
++// quarter of the heap has been allocated since the last collection; nested code
++// then starts with at least that much free memory.  The check is a single
++// comparison, the collection happens at most once per quarter heap of allocations.
++void mp_js_gc_collect_before_js_call(void) {
++    // Not while the heap is locked: that includes a collection in progress (a
++    // finaliser calling JS), which must not be re-entered.
++    if (MP_STATE_MEM(gc_alloc_amount) >= gc_pre_js_call_blocks && !gc_is_locked()) {
++        gc_collect();
++    }
++}
++
++void gc_collect(void) {
++    if (!mp_js_gc_can_spill()) {
++        // Python was re-entered from JS that was itself called from Python.  The
++        // locals of the outer wasm frames cannot be spilled through the JS frame in
++        // between, so a collection could free live objects.  Skip it: if the heap is
++        // really full the allocation fails with MemoryError instead of corrupting it.
++        return;
++    }
++    gc_collect_start();
++    emscripten_scan_stack(gc_scan_func);
++    mp_js_gc_spill_and_scan();
++    gc_collect_end();
++}
++
+ #else
+ 
+ static void gc_scan_func(void *begin, void *end) {
+@@ -222,6 +313,74 @@ void gc_collect(void) {
+ 
+ #endif
+ 
++#if MICROPY_VM_HOOK_BYTECODE_COUNTER
++
++// Bytecode counter (SPARK simulator patch).  MICROPY_VM_HOOK_BYTECODE (in py/vm.c,
++// run once per executed bytecode) decrements mp_js_vm_hook_budget and calls
++// mp_js_vm_hook_expired() when it reaches zero.  The JS side is notified with the
++// number of bytecodes executed in the elapsed period.  An interval of 0 disables
++// the callback (counting continues, see mp_js_vm_hook_take()).
++
++#define VM_HOOK_IDLE_PERIOD (0x40000000)
++
++uint32_t mp_js_vm_hook_budget = VM_HOOK_IDLE_PERIOD;
++static uint32_t vm_hook_period = VM_HOOK_IDLE_PERIOD;
++static uint32_t vm_hook_interval = 0;
++
++static void vm_hook_restart(void) {
++    vm_hook_period = vm_hook_interval ? vm_hook_interval : VM_HOOK_IDLE_PERIOD;
++    mp_js_vm_hook_budget = vm_hook_period;
++}
++
++// The simulator's timer interrupt: when the JS hook reports a due timer, the Python handler registered
++// with _spark_irq.set() is scheduled like an interrupt handler (mp_sched_schedule, as rp2 soft timers do).
++// It runs at the next pending check of the VM, also inside loops whose body is a single statement.
++MP_REGISTER_ROOT_POINTER(mp_obj_t spark_irq_handler);
++
++void mp_js_vm_hook_expired(void) {
++    uint32_t n = vm_hook_period;
++    vm_hook_restart();
++    if (vm_hook_interval) {
++        if (mp_js_vm_hook(n) && MP_STATE_VM(spark_irq_handler) != MP_OBJ_NULL) {
++            mp_sched_schedule(MP_STATE_VM(spark_irq_handler), mp_const_none);
++        }
++    }
++}
++
++static mp_obj_t spark_irq_set(mp_obj_t handler) {
++    MP_STATE_VM(spark_irq_handler) = handler == mp_const_none ? MP_OBJ_NULL : handler;
++    return mp_const_none;
++}
++static MP_DEFINE_CONST_FUN_OBJ_1(spark_irq_set_obj, spark_irq_set);
++
++static const mp_rom_map_elem_t spark_irq_globals_table[] = {
++    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__spark_irq) },
++    { MP_ROM_QSTR(MP_QSTR_set), MP_ROM_PTR(&spark_irq_set_obj) },
++};
++static MP_DEFINE_CONST_DICT(spark_irq_globals, spark_irq_globals_table);
++
++const mp_obj_module_t mp_module_spark_irq = {
++    .base = { &mp_type_module },
++    .globals = (mp_obj_dict_t *)&spark_irq_globals,
++};
++MP_REGISTER_MODULE(MP_QSTR__spark_irq, mp_module_spark_irq);
++
++// Exported: set the callback interval in bytecodes (0 = no callback).
++void mp_js_vm_hook_set_interval(uint32_t interval) {
++    vm_hook_interval = interval;
++    vm_hook_restart();
++}
++
++// Exported: return the number of bytecodes executed since the last callback (or
++// the last call of this function) and start a new period.
++uint32_t mp_js_vm_hook_take(void) {
++    uint32_t n = vm_hook_period - mp_js_vm_hook_budget;
++    vm_hook_restart();
++    return n;
++}
++
++#endif
++
+ #if !MICROPY_VFS
+ mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
+     mp_raise_OSError(MP_ENOENT);
+diff --git a/ports/webassembly/objjsproxy.c b/ports/webassembly/objjsproxy.c
+index 7d6e020..fc6fd2e 100644
+--- a/ports/webassembly/objjsproxy.c
++++ b/ports/webassembly/objjsproxy.c
+@@ -222,6 +222,12 @@ static void jsproxy_print(const mp_print_t *print, mp_obj_t self_in, mp_print_ki
+ static mp_obj_t jsproxy_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+     mp_obj_jsproxy_t *self = MP_OBJ_TO_PTR(self_in);
+ 
++    #if MICROPY_GC_SYNC_ASYNCIFY
++    // The JS function may call back into Python, where no collection can run.
++    extern void mp_js_gc_collect_before_js_call(void);
++    mp_js_gc_collect_before_js_call();
++    #endif
++
+     mp_arg_check_num(n_args, n_kw, 0, MP_OBJ_FUN_ARGS_MAX, true);
+ 
+     if (n_kw != 0) {
+diff --git a/py/vm.c b/py/vm.c
+index ed0ddd6..9e63092 100644
+--- a/py/vm.c
++++ b/py/vm.c
+@@ -146,6 +146,11 @@
+     } \
+ } while (0)
+ 
++// Hook run once per executed bytecode, before dispatch (SPARK simulator patch).
++#ifndef MICROPY_VM_HOOK_BYTECODE
++#define MICROPY_VM_HOOK_BYTECODE
++#endif
++
+ #if MICROPY_PY_SYS_SETTRACE
+ 
+ #define FRAME_SETUP() do { \
+@@ -245,6 +250,7 @@ mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_cod
+ #if MICROPY_OPT_COMPUTED_GOTO
+     #include "py/vmentrytable.h"
+     #define DISPATCH() do { \
++        MICROPY_VM_HOOK_BYTECODE \
+         TRACE(ip); \
+         MARK_EXC_IP_GLOBAL(); \
+         TRACE_TICK(ip, sp, false); \
+@@ -326,6 +332,7 @@ dispatch_loop:
+                 #if MICROPY_OPT_COMPUTED_GOTO
+                 DISPATCH();
+                 #else
++                MICROPY_VM_HOOK_BYTECODE
+                 TRACE(ip);
+                 MARK_EXC_IP_GLOBAL();
+                 TRACE_TICK(ip, sp, false);
