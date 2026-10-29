@@ -8,7 +8,7 @@ runs (`npm install && npm run dev`) and all checks pass (see "Verified").
 At the triathlon, teams get their Zumo 2040 only a few hours before Challenge 1. Until then the simulator is the
 only thing they can practise on. Three requirements follow:
 
-1. **Same code.** The `main.py` that runs in the simulator runs unchanged on the robot and vice versa.
+1. **Same code.** The program that runs in the simulator runs unchanged on the robot and vice versa.
 2. **Same behaviour.** What works in the simulator works on the real board: speed, sensor values, loop timing,
    pushing, tipping, memory.
 3. **On their own.** Every team has its own area and can load any number of robots (own versions, house bots).
@@ -166,7 +166,7 @@ checked on real robots.
 | Floats are double precision (RP2040: single) | rare numeric differences | build variant with `MICROPY_FLOAT_IMPL_FLOAT`; clock values must then be passed as integers | 2 |
 | Shop parts on I2C (ToF, BNO085, VCNL4200, 8×8 ToF, servos) | `machine.I2C` answers ENODEV | register-level device models, sensor models from the old `sensoren.py` | 2 |
 | IR interference between robots, ambient light | proximity too clean with 4 robots | treat other robots' 56 kHz pulses as light sources in the ray cast | 2 |
-| Only `main.py` per robot | no own modules | file tree per robot in the editor, written to the MicroPython file system | 3 |
+| Only one program file per robot | no own modules | file tree per robot in the editor, written to the MicroPython file system | 3 |
 | No server: code lives in the browser's storage | no team area, no sharing between devices | login with team codes, code versions, run history, reveal of arena packs | 4 |
 | Rules not yet fed by the camera | judging at the event is manual | connect `tracking/tracker.py` output to `Rules.step()` | 5 |
 | Blade edges not measured | the per-robot blade height (EST ± 0.1 mm) decides 71 % of house-bot sumo matches, mostly in the opening clash; benches need ≥ 20 matches per pairing | measure the edge height at both ends of 5–10 real Zumos with a feeler gauge (10 minutes) and film head-on hits at different powers; then set `bladeGapSpread`/`bladeTiltSpread` | 1 |

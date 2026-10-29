@@ -674,7 +674,7 @@ function renderSourceInfo() {
   meta.className = "meta";
   if (s.source === CUSTOM) {
     const p = document.createElement("span");
-    p.textContent = "Your program — edit freely. ⇩ main.py saves it for the real robot.";
+    p.textContent = "Your program — edit freely. ⇩ Download saves it for the real robot.";
     inner.append(p);
   } else {
     const b = BOT_BY_ID[s.source];
@@ -767,7 +767,7 @@ $("remove-robot").onclick = () => {
   }
   const s = slots[editorSlot];
   // your own code would be gone for good
-  if (s.code.trim() && s.code !== starter && !confirm(`Remove "${s.name}" and its code?\n\n⇩ main.py saves a copy first.`)) return;
+  if (s.code.trim() && s.code !== starter && !confirm(`Remove "${s.name}" and its code?\n\n⇩ Download saves a copy first.`)) return;
   flushSave();
   slots.splice(editorSlot, 1);
   states.splice(editorSlot, 1);
@@ -781,12 +781,17 @@ $("remove-robot").onclick = () => {
   bench.refreshOptions();
 };
 
-$("download").onclick = () => {
+// the file name is picked in the menu: one file per challenge, as in the team repos
+$<HTMLSelectElement>("download").onchange = (e) => {
+  const pick = e.target as HTMLSelectElement;
+  const name = pick.value;
+  pick.value = "";
+  if (!name) return;
   const s = slots[editorSlot];
   const blob = new Blob([codeOf(s)], { type: "text/x-python" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "main.py";
+  a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
@@ -1330,11 +1335,11 @@ function startTour() {
     [
       {
         title: "Welcome to SPARK Sim",
-        text: "Here you train your Zumo 2040 before you hold it: write the same main.py you will copy onto the robot, run it against realistic physics and opponents, and see everything the robot senses. One minute for the tour — or Esc to skip.",
+        text: "Here you train your Zumo 2040 before you hold it: write the same code you will copy onto the robot, run it against realistic physics and opponents, and see everything the robot senses. One minute for the tour — or Esc to skip.",
       },
       { target: "#panel-code .panel-head", before: ensure("code"), title: "Robots on the field", text: "Every tab is one robot (up to 4, depending on the arena). The colour is the robot's colour in the 3D view and in the console." },
       { target: ".source-row", before: ensure("code"), title: "Your code or an opponent", text: "Choose your own code, an example, or a house bot as opponent. House bots are read-only — “Edit a copy” turns one into your own code." },
-      { target: "#editor", before: ensure("code"), title: "The editor", text: "Your main.py, saved in this browser. Type “motors.” for suggestions, hover over a robot call for its documentation. Errors from the robot are marked at their line." },
+      { target: "#editor", before: ensure("code"), title: "The editor", text: "Your program, saved in this browser. Type “motors.” for suggestions, hover over a robot call for its documentation. Errors from the robot are marked at their line." },
       { target: "#start", title: "Run and Start", text: "▶ Run (Space) starts the programs. Like at a real bout, the robots then wait for the start signal: ⚑ Start (key S) presses button A on every robot, and 5 s later they may move. ⚑ Start alone does both. “Auto start” in the 3D view gives the signal right after Run." },
       { target: "#arena", title: "Arenas", text: "Mini sumo dohyo, line track race, King of the Hill and the A↔B shuttle, each with its real rules, scoring and time limit." },
       { target: "#viewer", title: "The 3D view", text: "Drag to orbit, right-drag to pan, wheel to zoom. Shift+drag moves a robot (the wheel turns it). The scoreboard shows the rules' verdict." },

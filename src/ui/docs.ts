@@ -23,7 +23,7 @@ export function helpContent(actions: { tour: () => void; docs: () => void }): HT
     el("h2", "Train your Zumo before you hold it."),
     el(
       "p",
-      "Write the same main.py you will copy onto the robot. It runs in real MicroPython, against MuJoCo physics with tracks, blade, battery sag and realistic sensor timing. Pick house bots as opponents, run test benches with hundreds of matches, scrub through every moment and download your code when it is ready.",
+      "Write the same code you will copy onto the robot. It runs in real MicroPython, against MuJoCo physics with tracks, blade, battery sag and realistic sensor timing. Pick house bots as opponents, run test benches with hundreds of matches, scrub through every moment and download your code when it is ready.",
     ),
   );
   const acts = el("div", undefined, "modal-actions");

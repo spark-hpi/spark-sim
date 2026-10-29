@@ -735,6 +735,10 @@ input[type="range"] {
 .code-foot .btn {
   padding: 0.3em 0.65em;
 }
+.code-foot select.file-pick {
+  cursor: pointer;
+  max-width: 11em;
+}
 .hint {
   color: var(--muted);
   text-transform: uppercase;

@@ -665,10 +665,10 @@ elapsed = time.ticks_diff(time.ticks_ms(), start)`,
 
 /** Things that are simulated, approximated or missing — shown in the Docs panel so nobody is surprised. */
 export const SIM_NOTES: [string, string][] = [
-  ["Same code", "Your main.py runs unchanged in real MicroPython (WebAssembly). Download it and copy it to the robot."],
+  ["Same code", "Your program runs unchanged in real MicroPython (WebAssembly). Download it and copy it to the robot."],
   ["Timing", "Every executed Python line costs ~6 µs robot time; sensor reads cost their real duration (line 1.06 ms, proximity 6.85 ms, display 4 ms). Loop rates match the real robot."],
   ["Physics", "MuJoCo 3D: tracks, blade wedge, tipping, battery sag. Values marked EST in zumo-spec.ts are estimates until calibrated with real robots."],
   ["Blades", "Blade edges differ between robots by tenths of a millimetre in height and tilt, like real ones (new per run). Head-on, the blade that is lower where they meet gets under the other — the angle and spot of the hit matter, pushing harder does not."],
   ["Sensors", "Line: each sensor sees a ~5 mm light spot, so tape edges give in-between values; a lifted sensor reads like black. Proximity: ray fan with LED cones and material reflectivity. IMU from the rigid body, with noise and a per-robot gyro bias. Encoders from the sprocket angle."],
-  ["Not yet", "Shop parts on I2C (ToF, BNO085, servos — machine.I2C answers ENODEV), IR interference between robots, ambient light, IMU output-data-rate filtering, @micropython.native/viper speed-ups, asyncio, files besides main.py. Floats are double precision (the robot uses single precision)."],
+  ["Not yet", "Shop parts on I2C (ToF, BNO085, servos — machine.I2C answers ENODEV), IR interference between robots, ambient light, IMU output-data-rate filtering, @micropython.native/viper speed-ups, asyncio, more than one file per robot. Floats are double precision (the robot uses single precision)."],
 ];

@@ -218,7 +218,7 @@ export const DOC_PAGES: DocPage[] = [
     summary: "What the simulator is for, and a five-minute tour of the screen.",
     blocks: [
       {
-        p: "SPARK Sim is a training ground for the Pololu **Zumo 2040**. You write the same `main.py` that you will later copy onto the real robot, and the simulator runs it in real MicroPython against a 3D physics model of the Zumo: tracks, blade, battery, sensors and their timing. Your team gets its real robot only a few hours before the event, so this is where you learn, test and tune.",
+        p: "SPARK Sim is a training ground for the Pololu **Zumo 2040**. You write the same program that you will later copy onto the real robot, and the simulator runs it in real MicroPython against a 3D physics model of the Zumo: tracks, blade, battery, sensors and their timing. Your team gets its real robot only a few hours before the event, so this is where you learn, test and tune.",
       },
       { p: "Everything runs in your browser. Your code is saved in this browser automatically; nothing is uploaded." },
       {
@@ -230,7 +230,7 @@ export const DOC_PAGES: DocPage[] = [
         ordered: true,
         list: [
           "**Top bar.** Pick the **Arena**, then **▶ Run** (starts all programs from their start positions), **■ Stop** (programs and motors off) and **↺ Reset** (robots back to the start without running). The speed buttons pause the simulation or run it at ¼×, ½×, 1×, 4× or as fast as your computer can; next to them you see the robot time and how fast it runs compared to real time. On the right: **Docs**, **▦ Layout**, **⚙** settings and **?** help.",
-          "**Code** (left). One tab per robot, up to four. Each robot has a name and a **Program**: *✎ My code* (your editable program), an example, or a house bot to train against. Below the editor: **⇩ main.py** downloads the program for the real robot, **⇧ Open** loads a `.py` file, **⇪ Link** copies a link that contains the whole program.",
+          "**Code** (left). One tab per robot, up to four. Each robot has a name and a **Program**: *✎ My code* (your editable program), an example, or a house bot to train against. Below the editor: **⇩ Download** saves the program for the real robot (pick the file name: `challenge1.py` … `challenge3.py`), **⇧ Open** loads a `.py` file, **⇪ Link** copies a link that contains the whole program.",
           "**3D view** (middle). Drag to orbit, right-drag to pan, scroll to zoom, click a robot to select it, Shift + drag to move a robot (scroll while dragging turns it). The bar above it has the view style (Pixel, Spark, Clear), **World** settings, **Auto start**, **Sensors**, **Sound** and three camera buttons. The scoreboard shows the match clock and the scores; the timeline below lets you scrub back through everything that happened.",
           "**Bottom panel.** **Console** (everything your programs print, errors, referee messages), **Telemetry** (charts), **Test bench** (many matches at once) and **Docs** (what you are reading).",
           "**Inspector** (right). What the selected robot shows and sees: its display, the buttons A/B/C, the LEDs, the last line sensor and proximity readings, motors, motion, battery and IMU.",
@@ -278,7 +278,7 @@ export const DOC_PAGES: DocPage[] = [
           "Choose the arena **Free practice**: a big white table with nothing to bump into.",
           "Click the tab of robot 2 and remove it with **✕** (next to the robot's name), so your robot has the table to itself.",
           "Click the tab of robot 1 and set its **Program** to *✎ My code*.",
-          "Select all code in the editor (Ctrl/⌘ + A) and delete it. Want to keep it? Download it first with **⇩ main.py** (Ctrl/⌘ + Z also brings it back).",
+          "Select all code in the editor (Ctrl/⌘ + A) and delete it. Want to keep it? Download it first with **⇩ Download** (Ctrl/⌘ + Z also brings it back).",
         ],
       },
       { note: "Code boxes have **Copy** and, for complete programs, **Use as my program**: it replaces the code of the robot that is open in the editor (Ctrl/⌘ + Z in the editor brings your old code back). Short snippets have **Insert at cursor** instead." },
@@ -584,14 +584,14 @@ error = position - 2000                    # > 0: line is right of the centre
     id: "to-the-robot",
     group: "Start here",
     title: "From simulator to the real robot",
-    summary: "Download main.py, copy it onto the Zumo with Thonny or mpremote, and what to check first on real hardware.",
+    summary: "Download your challenge file, copy it onto the Zumo with Thonny or mpremote, start it from the robot's menu, and what to check first on real hardware.",
     blocks: [
       {
         p: "The simulator runs the same MicroPython and the same `zumo_2040_robot` library as the robot, so your program needs no changes. What changes is the world: real sensors, real batteries, a real floor. Plan time for re-tuning.",
       },
       { h: "1. Download", id: "download" },
       {
-        p: "Open your robot's tab and click **⇩ main.py**. The browser saves the program as `main.py`. MicroPython runs a file with this name automatically every time the robot starts.",
+        p: "Open your robot's tab, click **⇩ Download** and pick the file name: `challenge1.py`, `challenge2.py` or `challenge3.py`, one file per challenge, as in your team repo. Don't use `main.py` on the robot: MicroPython starts a file with that name **by itself** a few seconds after power-on, and at the event only the crew starts robots.",
       },
       { h: "2a. Copy with Thonny", id: "thonny" },
       {
@@ -599,21 +599,21 @@ error = position - 2000                    # > 0: line is right of the centre
         list: [
           "Install [Thonny](https://thonny.org) and connect the Zumo with a USB cable.",
           "In Thonny choose **Tools → Options → Interpreter → MicroPython (Raspberry Pi Pico)** and the robot's port (or let Thonny detect it). The shell shows the MicroPython prompt `>>>`.",
-          "Open your downloaded `main.py`, then **File → Save as… → Raspberry Pi Pico** and save it as `main.py` on the robot.",
-          "Restart the robot (power off and on, or Ctrl+D in the Thonny shell). While Thonny is connected you see everything your program prints.",
+          "Open your downloaded file (e.g. `challenge1.py`), then **File → Save as… → Raspberry Pi Pico** and save it under the **same name** on the robot, never as `main.py`.",
+          "Restart the robot (reset button, or Ctrl+D in the Thonny shell), press **C** for the menu, pick your file with A/C and press **B** to run it. While Thonny is connected you see everything your program prints.",
         ],
       },
       { h: "2b. Copy with mpremote", id: "mpremote" },
       {
         title: "Terminal (not Python)",
         code: `pip install mpremote
-mpremote cp main.py :main.py     # copy onto the robot
-mpremote reset                   # restart: main.py runs
-mpremote run main.py             # or: run it without saving, output in the terminal
+mpremote cp challenge1.py :challenge1.py   # copy onto the robot
+mpremote reset                             # restart: C = menu, pick the file, B = run
+mpremote run challenge1.py                 # or: run it without saving, output in the terminal
 `,
       },
       {
-        note: "Keep a copy of what is on the robot. If it already has a `main.py`, download that one first (Thonny: **View → Files**, right-click the file on the robot → *Download*), so you can restore it.",
+        note: "Never overwrite `main.py` or `main_menu.py` on the robot: they hold the start menu, and a `main.py` of your own would start by itself. If one got replaced by accident, tell the SPARK team; they restore it.",
         kind: "warn",
       },
       { h: "3. The first run", id: "safety" },
@@ -654,7 +654,7 @@ mpremote run main.py             # or: run it without saving, output in the term
       {
         title: "template.py",
         insert: true,
-        code: `# main.py: template for a Zumo 2040 program
+        code: `# challenge1.py: template for a Zumo 2040 program
 from zumo_2040_robot import robot
 import time
 
@@ -1962,7 +1962,7 @@ led.off()
         p: "Keep callbacks short: they interrupt your main program between two statements. `Timer(freq=100, callback=f)` works too, and `mode=Timer.ONE_SHOT` calls the function once. Stop a timer with `deinit()`.",
       },
       { h: "One file only", id: "files" },
-      { p: "Each robot has exactly one program file, `main.py`. Split your code into functions, not into modules." },
+      { p: "In the simulator each robot runs exactly one program file. Split your code into functions, not into modules." },
     ],
   },
 
@@ -2339,7 +2339,7 @@ motors.off()
         table: {
           head: ["Part", "Modelled", "Good to know"],
           rows: [
-            ["Program", "real MicroPython 1.29 with Pololu's `zumo_2040_robot` library: same API, same quirks", "only `main.py`; see [Other modules](doc:ref-other-modules)"],
+            ["Program", "real MicroPython 1.29 with Pololu's `zumo_2040_robot` library: same API, same quirks", "one file per robot; see [Other modules](doc:ref-other-modules)"],
             ["Timing", "every bytecode ≈ 1.7 µs, sensor reads with their real duration, display 4 ms, timers like interrupts", "[Timing](doc:timing)"],
             ["Memory", "fixed heap (≈ 160 KB free at the start), real garbage collector, `MemoryError`", "[Memory](doc:memory)"],
             ["Motors", "DRV8838 driver, back-EMF, gearbox friction, rotor inertia; motors differ by a few % between robots", "top speed ≈ 0.65 m/s"],
@@ -2361,7 +2361,7 @@ motors.off()
           "**IR between robots**: other robots' proximity flashes do not disturb your sensors, and there is no ambient light.",
           "**IMU filtering**: reading faster than the output data rate gives fresh values in the simulator but the same sample again on the robot.",
           "**Speed-up decorators**: `@micropython.native` and `@viper` run as normal bytecode, slower than on the robot.",
-          "**asyncio**, `_thread`, and files besides `main.py`.",
+          "**asyncio**, `_thread`, and more than one file per robot.",
           "**Single-precision floats**: the simulator computes with double precision.",
           "**Garbage collection pauses** cost no robot time in the simulator.",
           "**Calibration**: most physical values are estimates until they have been measured on real Zumos. Exact numbers (top speed, proximity range, sensor values) may still change somewhat.",
@@ -2403,7 +2403,7 @@ motors.off()
       {
         ordered: true,
         list: [
-          "Put every tunable number into a constant at the top of `main.py`.",
+          "Put every tunable number into a constant at the top of your program.",
           "Prefer measured quantities (gyro angle, encoder distance, calibrated values) over times.",
           "Test with all World settings ([checklist](doc:robustness)): a program that only works in one setting is fragile.",
           "Prepare a sensor check and a short motor test you can run in the first minutes with the real robot.",
@@ -2499,7 +2499,7 @@ motors.off()
       {
         list: [
           "Your code is saved in this browser automatically, per robot tab. It is not stored on a server: another browser or computer does not have it, and clearing the browser's site data deletes it.",
-          "**⇩ main.py** downloads the program. Do it regularly: it is your backup and what goes onto the robot.",
+          "**⇩ Download** saves the program. Do it regularly: it is your backup and what goes onto the robot.",
           "**⇧ Open** loads a `.py` file into the selected robot (it replaces that robot's code).",
           "**⇪ Link** copies a link that contains the whole program (compressed into the link, no server involved). Opening the link puts the program into the first robot that runs *✎ My code* (it asks before replacing code).",
         ],
@@ -2550,7 +2550,7 @@ motors.off()
       },
       { h: "My code is gone", id: "lost-code" },
       {
-        p: "Code is stored per browser and per robot tab. Another browser, a private window or cleared site data start empty. If you chose a house bot for a tab, switch its Program back to *✎ My code*: your code is still there. Download **⇩ main.py** regularly as a backup.",
+        p: "Code is stored per browser and per robot tab. Another browser, a private window or cleared site data start empty. If you chose a house bot for a tab, switch its Program back to *✎ My code*: your code is still there. Use **⇩ Download** regularly as a backup.",
       },
       { h: "The editor does not let me type", id: "readonly" },
       { p: "The tab runs a house bot or an example, which are read-only. Choose *✎ My code*, or use **Edit a copy →** to start from that program." },

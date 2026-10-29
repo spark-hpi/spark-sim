@@ -1,6 +1,6 @@
 # SPARK Sim
 
-An open-source **Zumo 2040 simulator**: write the same `main.py` you copy onto the real robot and run
+An open-source **Zumo 2040 simulator**: write the same program you copy onto the real robot and run
 it in **real MicroPython** (a custom WebAssembly build with the RP2040's heap limit) against **MuJoCo 3D
 physics** of the Zumo — tracks, blade, battery sag, realistic sensor timing — in the browser.
 
@@ -55,7 +55,7 @@ node deploy/serve-practice.mjs        # serves ./dist-practice on http://localho
 - **Test bench:** many headless matches in parallel → win rate with a confidence interval; watch any match again.
 - **Debugging:** a timeline to scrub every frame, telemetry strip charts, a plotter for your `print`s, a 3D
   sensor view, errors marked in the editor, autocompletion and in-app docs for the robot API.
-- **Download `main.py`** for the real robot; your code is saved in the browser.
+- **Download** your program for the real robot (as `challenge1.py` … `challenge3.py` or `main.py`); your code is saved in the browser.
 
 ## Layout
 

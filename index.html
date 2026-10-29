@@ -86,7 +86,13 @@
         <div id="source-info" class="source-info"></div>
         <div id="editor" class="editor"></div>
         <div class="code-foot">
-          <button id="download" class="btn" title="Save as main.py to copy onto the real robot">⇩ main.py</button>
+          <select id="download" class="btn file-pick" aria-label="Download this program as" title="Save this program for the real robot: one file per challenge">
+            <option value="" selected>⇩ Download</option>
+            <option>challenge1.py</option>
+            <option>challenge2.py</option>
+            <option>challenge3.py</option>
+            <option>main.py</option>
+          </select>
           <button id="upload" class="btn" title="Open a .py file into this robot">⇧ Open</button>
           <button id="share" class="btn" title="Copy a link that opens this program — no server needed">⇪ Link</button>
           <input id="upload-file" type="file" accept=".py,text/x-python,text/plain" hidden />
