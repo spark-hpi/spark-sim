@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import loadMujoco from "mujoco";
 import { arenaById, jitteredStarts, type Pose } from "../src/shared/arenas.ts";
-import { C, makeBell, makeChannelBuffers, openChannel, type FromRobot } from "../src/shared/protocol.ts";
+import { C, makeBell, makeChannelBuffers, openChannel, NOMINAL, type FromRobot, type WorldTweaks } from "../src/shared/protocol.ts";
 import type { MatchState } from "../src/world/rules.ts";
 import { World } from "../src/world/world.ts";
 
@@ -59,6 +59,8 @@ export interface MatchOptions {
   stopWhenOut?: boolean;
   /** stop when the rules have decided the match (default true) */
   stopWhenDecided?: boolean;
+  /** battery, grip and sensor noise (default nominal) */
+  tweaks?: Partial<WorldTweaks>;
 }
 
 export async function runMatch(opts: MatchOptions): Promise<MatchResult> {
@@ -70,7 +72,7 @@ export async function runMatch(opts: MatchOptions): Promise<MatchResult> {
     opts.poses ?? (opts.jitter ? jitteredStarts(arena, opts.programs.length, seed, opts.jitter) : opts.programs.map((_, i) => arena.starts[i]));
   const names = opts.programs.map((_, i) => opts.names?.[i] ?? `Robot ${i + 1}`);
   // presses are executed by the world at exact sim times (deterministic)
-  const world = new World(mj, arena, poses, { seed, proxThreshold: threshold, names, presses: opts.presses });
+  const world = new World(mj, arena, poses, { seed, proxThreshold: threshold, names, presses: opts.presses, tweaks: { ...NOMINAL, ...opts.tweaks } });
   const bellSab = makeBell();
   const bell = new Int32Array(bellSab);
   const wasmUrl = join(root, "vendor/micropython/micropython.wasm");
